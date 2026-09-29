@@ -657,10 +657,9 @@ def is_index_complete(index_dir: Path) -> bool:
 
 
 def _write_jsonl(path: Path, df: pl.DataFrame) -> None:
-    with open(path, "wb") as fh:
-        for row in df.iter_rows(named=True):
-            fh.write(canonical_json(row))
-            fh.write(b"\n")
+    # Sort columns alphabetically to ensure deterministic JSON key order (matching canonical_json)
+    sorted_cols = sorted(df.columns)
+    df.select(sorted_cols).write_ndjson(path)
 
 
 def _write_index(
