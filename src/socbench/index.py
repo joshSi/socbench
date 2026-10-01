@@ -606,20 +606,37 @@ class IndexManifest(BaseModel):
     socbench_version: str
 
 
+class _HasherFile:
+    def __init__(self) -> None:
+        self.h = hashlib.blake2b(digest_size=16)
+
+    def write(self, b: bytes) -> int:
+        self.h.update(b)
+        return len(b)
+
+    def flush(self) -> None:
+        pass
+
+
 def compute_payload_hash(flows: pl.DataFrame) -> str:
     """Stable hash of ``flows.parquet`` content (excludes parquet container bytes).
 
     Iterates in chunks so the full row-serialized payload never sits in memory.
+    ⚡ Bolt Optimization: Uses native polars write_ndjson with a buffered hasher
+    instead of Python row iteration to achieve native C speed hashing.
     """
     missing = [c for c in _PAYLOAD_COLUMNS if c not in flows.columns]
     if missing:
         raise ValueError(f"compute_payload_hash: missing columns {missing}")
-    sorted_df = flows.sort("_flow_id").select(_PAYLOAD_COLUMNS)
-    h = hashlib.blake2b(digest_size=16)
-    for batch in sorted_df.iter_slices(n_rows=10_000):
-        for row in batch.iter_rows(named=False):
-            h.update(canonical_json(list(row)))
-    return h.hexdigest()
+
+    # Sort columns alphabetically to ensure deterministic JSON key order.
+    # The output from write_ndjson is chunked natively by Polars directly into the hasher.
+    sorted_cols = sorted(_PAYLOAD_COLUMNS)
+    sorted_df = flows.sort("_flow_id").select(sorted_cols)
+
+    hf = _HasherFile()
+    sorted_df.write_ndjson(hf)
+    return hf.h.hexdigest()
 
 
 def compute_dataset_hash(

@@ -31,7 +31,7 @@ import argparse
 import hashlib
 import sys
 import textwrap
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
 
     con = duckdb.connect()
     try:
-        con.execute(f"SET threads = 4")
+        con.execute("SET threads = 4")
         # Stratified sample: half malicious, half benign, deterministic via setseed.
         # `Attack` column convention: anything not lower('benign') / empty is malicious.
         con.execute(f"CALL dbgen('seed:{args.seed}')") if False else None  # placeholder
@@ -163,7 +163,7 @@ def _write_provenance(
         | Output | `{output.name}` |
         | Bytes | {file_bytes:,} |
         | SHA-256 | `{file_sha256}` |
-        | Built at (UTC) | `{datetime.now(tz=timezone.utc).isoformat()}` |
+        | Built at (UTC) | `{datetime.now(tz=UTC).isoformat()}` |
 
         ## Source
 
