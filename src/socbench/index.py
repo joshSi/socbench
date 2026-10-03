@@ -476,19 +476,21 @@ def assign_eval_units(
     )
     if per_host_bucket.is_empty():
         host_egress_hosts: set[str] = set()
+        host_egress_hosts_list: list[str] = []
     else:
         host_max = per_host_bucket.group_by("src_ip", maintain_order=False).agg(
             max_distinct_dst=pl.col("distinct_dst").max()
         )
-        host_egress_hosts = set(
-            host_max.filter(pl.col("max_distinct_dst") >= fanout_K)["src_ip"].to_list()
-        )
+        host_egress_hosts_list = host_max.filter(pl.col("max_distinct_dst") >= fanout_K)[
+            "src_ip"
+        ].to_list()
+        host_egress_hosts = set(host_egress_hosts_list)
 
     units: list[EvalUnit] = []
 
     # pair_timeline mode: one unit per (src_ip, dst_ip), split into contiguous
     # time chunks of at most ``max_flows_per_unit`` flows.
-    pair_mode = annotated.filter(~pl.col("src_ip").is_in(list(host_egress_hosts)))
+    pair_mode = annotated.filter(~pl.col("src_ip").is_in(host_egress_hosts_list))
     if not pair_mode.is_empty():
         per_pair = (
             pair_mode.sort(["src_ip", "dst_ip", "ts_start", "_flow_id"])
@@ -525,7 +527,7 @@ def assign_eval_units(
     # host_egress mode: one unit per (src_ip, bucket), split into contiguous
     # time chunks of at most ``max_flows_per_unit`` flows. distinct_destinations
     # is recomputed per chunk.
-    host_mode = annotated.filter(pl.col("src_ip").is_in(list(host_egress_hosts)))
+    host_mode = annotated.filter(pl.col("src_ip").is_in(host_egress_hosts_list))
     if not host_mode.is_empty():
         per_window = (
             host_mode.sort(["src_ip", "bucket", "ts_start", "_flow_id"])
