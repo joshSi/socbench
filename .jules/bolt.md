@@ -1,3 +1,6 @@
 ## 2024-05-18 - Replacing iterative row hashing with native polars write_ndjson
 **Learning:** Writing jsonl files row by row in Python using `iter_rows` and `canonical_json` is extremely slow for large datasets in polars.
 **Action:** Use polars `write_ndjson` combined with sorting columns `df.select(sorted(df.columns)).write_ndjson()` to emit sorted-key JSON objects deterministically and at native speed without breaking hashing constraints.
+## 2024-05-18 - Replacing iter_rows with zip over columns in Polars
+**Learning:** Iterating through a Polars DataFrame using `iter_rows(named=True)` or even plain `iter_rows()` introduces significant Python overhead, especially when looping over rows from a `group_by` operation that return lists. The type casting and row materialization per-iteration is very slow compared to the time it takes Polars to compute the underlying data.
+**Action:** Use Python's built-in `zip` function directly on the DataFrame columns (e.g., `zip(df["col1"], df["col2"])`). Convert grouped lists into Python lists efficiently using `.to_list()` on the iterated values instead of list comprehensions with manual casting. This technique preserves execution speed by minimizing Python object creation overhead.
