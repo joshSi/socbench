@@ -499,10 +499,19 @@ def assign_eval_units(
                 tss=pl.col("ts_start"),
             )
         )
-        for row in per_pair.iter_rows(named=True):
-            fids = [int(x) for x in row["flow_ids"]]
-            ismal = [int(x) for x in row["is_mal"]]
-            tss = [float(x) for x in row["tss"]]
+        # ⚡ Bolt Optimization: Replace iter_rows with zip over columns
+        # to avoid dictionary materialization overhead
+        for src_ip, dst_ip, raw_fids, raw_ismal, raw_tss in zip(
+            per_pair["src_ip"].to_list(),
+            per_pair["dst_ip"].to_list(),
+            per_pair["flow_ids"].to_list(),
+            per_pair["is_mal"].to_list(),
+            per_pair["tss"].to_list(),
+            strict=True,
+        ):
+            fids = [int(x) for x in raw_fids]
+            ismal = [int(x) for x in raw_ismal]
+            tss = [float(x) for x in raw_tss]
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
                 mal = sum(ismal[a:b])
@@ -510,8 +519,8 @@ def assign_eval_units(
                     EvalUnit(
                         eval_unit_id="pt-" + hash_flow_ids(cf)[:16],
                         unit_type="pair_timeline",
-                        src_ip=row["src_ip"],
-                        dst_ip=row["dst_ip"],
+                        src_ip=src_ip,
+                        dst_ip=dst_ip,
                         flow_ids=cf,
                         flow_count=len(cf),
                         malicious_flow_count=mal,
@@ -537,20 +546,30 @@ def assign_eval_units(
                 dsts=pl.col("dst_ip"),
             )
         )
-        for row in per_window.iter_rows(named=True):
-            fids = [int(x) for x in row["flow_ids"]]
-            ismal = [int(x) for x in row["is_mal"]]
-            tss = [float(x) for x in row["tss"]]
-            dsts = list(row["dsts"])
-            bucket = int(row["bucket"])
+        # ⚡ Bolt Optimization: Replace iter_rows with zip over columns
+        # to avoid dictionary materialization overhead
+        for src_ip, bucket_val, raw_fids, raw_ismal, raw_tss, raw_dsts in zip(
+            per_window["src_ip"].to_list(),
+            per_window["bucket"].to_list(),
+            per_window["flow_ids"].to_list(),
+            per_window["is_mal"].to_list(),
+            per_window["tss"].to_list(),
+            per_window["dsts"].to_list(),
+            strict=True,
+        ):
+            fids = [int(x) for x in raw_fids]
+            ismal = [int(x) for x in raw_ismal]
+            tss = [float(x) for x in raw_tss]
+            dsts = list(raw_dsts)
+            bucket = int(bucket_val)
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
                 mal = sum(ismal[a:b])
                 units.append(
                     EvalUnit(
-                        eval_unit_id="he-" + hash_obj([row["src_ip"], bucket, cf])[:16],
+                        eval_unit_id="he-" + hash_obj([src_ip, bucket, cf])[:16],
                         unit_type="host_egress",
-                        src_ip=row["src_ip"],
+                        src_ip=src_ip,
                         dst_ip=None,
                         flow_ids=cf,
                         flow_count=len(cf),
