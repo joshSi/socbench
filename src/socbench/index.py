@@ -21,6 +21,7 @@ This module is the entirety of the index build. Public entrypoints:
 ``dataset_hash`` is **content-addressed**: same logical data + same schema +
 same build args ⇒ same hash. See ``compute_payload_hash`` for the algorithm.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -199,11 +200,9 @@ def normalize_parquet(  # noqa: PLR0912, PLR0915: single linear pipeline; splitt
                 select_parts.append(f'CAST("{src}" AS DOUBLE) AS {col}')
 
         if attack_col is not None:
-            attack_expr = (
-                f'COALESCE(NULLIF(TRIM(CAST("{attack_col}" AS VARCHAR)), \'\'), \'benign\')'
-            )
+            attack_expr = f"COALESCE(NULLIF(TRIM(CAST(\"{attack_col}\" AS VARCHAR)), ''), 'benign')"
             is_mal_expr = (
-                f'CASE WHEN LOWER(COALESCE(CAST("{attack_col}" AS VARCHAR), \'\')) '
+                f"CASE WHEN LOWER(COALESCE(CAST(\"{attack_col}\" AS VARCHAR), '')) "
                 f"IN ('', 'benign') THEN FALSE ELSE TRUE END"
             )
         elif label_col is not None:
@@ -266,9 +265,7 @@ def assign_flow_ids(df: pl.DataFrame) -> pl.DataFrame:
     if missing:
         raise ValueError(f"assign_flow_ids: missing sort keys {missing}")
     df = df.sort(by=_FLOW_ID_SORT_KEYS, descending=False, maintain_order=False)
-    return df.with_row_index(name="_flow_id").with_columns(
-        pl.col("_flow_id").cast(pl.UInt64)
-    )
+    return df.with_row_index(name="_flow_id").with_columns(pl.col("_flow_id").cast(pl.UInt64))
 
 
 # ===========================================================================
@@ -470,9 +467,8 @@ def assign_eval_units(
     # Classify each src_ip: max-over-buckets of distinct destination IPs.
     # Label-agnostic on purpose: unit boundaries must not depend on ground
     # truth (see the function docstring).
-    per_host_bucket = (
-        annotated.group_by(["src_ip", "bucket"], maintain_order=False)
-        .agg(distinct_dst=pl.col("dst_ip").n_unique())
+    per_host_bucket = annotated.group_by(["src_ip", "bucket"], maintain_order=False).agg(
+        distinct_dst=pl.col("dst_ip").n_unique()
     )
     if per_host_bucket.is_empty():
         host_egress_hosts: set[str] = set()
@@ -499,10 +495,18 @@ def assign_eval_units(
                 tss=pl.col("ts_start"),
             )
         )
-        for row in per_pair.iter_rows(named=True):
-            fids = [int(x) for x in row["flow_ids"]]
-            ismal = [int(x) for x in row["is_mal"]]
-            tss = [float(x) for x in row["tss"]]
+        # ⚡ Bolt Optimization: Avoid iter_rows() dictionary materialization overhead
+        for row_src_ip, row_dst_ip, row_flow_ids, row_is_mal, row_tss in zip(
+            per_pair["src_ip"].to_list(),
+            per_pair["dst_ip"].to_list(),
+            per_pair["flow_ids"].to_list(),
+            per_pair["is_mal"].to_list(),
+            per_pair["tss"].to_list(),
+            strict=True,
+        ):
+            fids = [int(x) for x in row_flow_ids]
+            ismal = [int(x) for x in row_is_mal]
+            tss = [float(x) for x in row_tss]
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
                 mal = sum(ismal[a:b])
@@ -510,8 +514,8 @@ def assign_eval_units(
                     EvalUnit(
                         eval_unit_id="pt-" + hash_flow_ids(cf)[:16],
                         unit_type="pair_timeline",
-                        src_ip=row["src_ip"],
-                        dst_ip=row["dst_ip"],
+                        src_ip=row_src_ip,
+                        dst_ip=row_dst_ip,
                         flow_ids=cf,
                         flow_count=len(cf),
                         malicious_flow_count=mal,
@@ -537,20 +541,29 @@ def assign_eval_units(
                 dsts=pl.col("dst_ip"),
             )
         )
-        for row in per_window.iter_rows(named=True):
-            fids = [int(x) for x in row["flow_ids"]]
-            ismal = [int(x) for x in row["is_mal"]]
-            tss = [float(x) for x in row["tss"]]
-            dsts = list(row["dsts"])
-            bucket = int(row["bucket"])
+        # ⚡ Bolt Optimization: Avoid iter_rows() dictionary materialization overhead
+        for row_src_ip, row_bucket, row_flow_ids, row_is_mal, row_tss, row_dsts in zip(
+            per_window["src_ip"].to_list(),
+            per_window["bucket"].to_list(),
+            per_window["flow_ids"].to_list(),
+            per_window["is_mal"].to_list(),
+            per_window["tss"].to_list(),
+            per_window["dsts"].to_list(),
+            strict=True,
+        ):
+            fids = [int(x) for x in row_flow_ids]
+            ismal = [int(x) for x in row_is_mal]
+            tss = [float(x) for x in row_tss]
+            dsts = list(row_dsts)
+            bucket = int(row_bucket)
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
                 mal = sum(ismal[a:b])
                 units.append(
                     EvalUnit(
-                        eval_unit_id="he-" + hash_obj([row["src_ip"], bucket, cf])[:16],
+                        eval_unit_id="he-" + hash_obj([row_src_ip, bucket, cf])[:16],
                         unit_type="host_egress",
-                        src_ip=row["src_ip"],
+                        src_ip=row_src_ip,
                         dst_ip=None,
                         flow_ids=cf,
                         flow_count=len(cf),
@@ -639,9 +652,7 @@ def compute_payload_hash(flows: pl.DataFrame) -> str:
     return hf.h.hexdigest()
 
 
-def compute_dataset_hash(
-    *, schema_hash: str, payload_hash: str, build_args: dict[str, Any]
-) -> str:
+def compute_dataset_hash(*, schema_hash: str, payload_hash: str, build_args: dict[str, Any]) -> str:
     return hash_obj(
         {"schema_hash": schema_hash, "build_args": build_args, "payload_hash": payload_hash}
     )
