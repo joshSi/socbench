@@ -293,8 +293,12 @@ def derive_pairs(flows: pl.DataFrame) -> pl.DataFrame:
         )
         .sort(["src_ip", "dst_ip"])
     )
+    # ⚡ Bolt Optimization: Avoid Series iteration overhead by using .to_list() for zip
     pair_ids = [
-        _pair_id_for(s, d) for s, d in zip(grouped["src_ip"], grouped["dst_ip"], strict=True)
+        _pair_id_for(s, d)
+        for s, d in zip(
+            grouped["src_ip"].to_list(), grouped["dst_ip"].to_list(), strict=True
+        )
     ]
     return grouped.with_columns(pl.Series(name="pair_id", values=pair_ids)).select(
         "pair_id",
