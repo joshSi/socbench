@@ -5,3 +5,7 @@
 ## 2025-02-15 - Optimizing Polars Python iteration with zip() and to_list()
 **Learning:** Iterating over Polars DataFrames in Python using `iter_rows()` is remarkably slow because it materializes a dictionary for every row.
 **Action:** Use `zip()` across multiple column `.to_list()` calls to achieve significantly faster iteration without the overhead of dictionary creation.
+
+## 2026-10-14 - Optimizing Polars Python iteration with to_list() over Series
+**Learning:** Iterating directly over a Polars `pl.Series` in Python is slow because it crosses the Python-Rust FFI (Foreign Function Interface) boundary for every single element.
+**Action:** Use `.to_list()` first to convert the series into a native Python list in one highly optimized pass on the Rust side, and iterate over that list instead.
