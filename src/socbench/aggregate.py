@@ -45,43 +45,55 @@ class _RunRef:
     summary: dict[str, Any]
 
 
-def _load_run(run_dir: Path) -> _RunRef | None:
-    """Load a run's metadata + summary, or None if either is missing/invalid."""
-    meta_path = run_dir / "run_metadata.json"
-    summary_path = run_dir / "summary.json"
-    if not (meta_path.exists() and summary_path.exists()):
-        return None
-    try:
-        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        log.warning("skipping run with unreadable artifacts", extra={"run_dir": str(run_dir)})
-        return None
-    return _RunRef(run_id=run_dir.name, run_dir=run_dir, metadata=metadata, summary=summary)
-
-
 def discover_runs(
     runs_root: Path, *, dataset_hash: str, sample_seed: int
 ) -> dict[str, _RunRef]:
-    """Return ``{ablation_tag: latest_run}`` for the given reproducibility pair."""
+    """Return ``{ablation_tag: latest_run}`` for the given reproducibility pair.
+
+    ⚡ Bolt Optimization: Lazily parses the large `summary.json` only for runs
+    that match the metadata filters, significantly speeding up discovery across
+    many runs.
+    """
     if not runs_root.exists():
         return {}
     by_tag: dict[str, _RunRef] = {}
     for run_dir in sorted(p for p in runs_root.iterdir() if p.is_dir()):
-        ref = _load_run(run_dir)
-        if ref is None:
+        meta_path = run_dir / "run_metadata.json"
+        summary_path = run_dir / "summary.json"
+        if not (meta_path.exists() and summary_path.exists()):
             continue
-        if ref.metadata.get("dataset_hash") != dataset_hash:
+
+        try:
+            metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            log.warning("skipping run with unreadable artifacts", extra={"run_dir": str(run_dir)})
             continue
-        if int(ref.metadata.get("sample_seed", -1)) != sample_seed:
+
+        if metadata.get("dataset_hash") != dataset_hash:
             continue
-        tag = ref.metadata.get("ablation")
+        if int(metadata.get("sample_seed", -1)) != sample_seed:
+            continue
+        tag = metadata.get("ablation")
         if tag not in _ABLATION_TAGS:
             continue
+
         # run_id is timestamp-prefixed → lexical max is the most recent.
         existing = by_tag.get(tag)
-        if existing is None or ref.run_id > existing.run_id:
-            by_tag[tag] = ref
+        if existing is None or run_dir.name > existing.run_id:
+            try:
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                log.warning(
+                    "skipping run with unreadable artifacts", extra={"run_dir": str(run_dir)}
+                )
+                continue
+
+            by_tag[tag] = _RunRef(
+                run_id=run_dir.name,
+                run_dir=run_dir,
+                metadata=metadata,
+                summary=summary
+            )
     return by_tag
 
 
