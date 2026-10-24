@@ -490,13 +490,13 @@ def assign_eval_units(
             pair_mode.sort(["src_ip", "dst_ip", "ts_start", "_flow_id"])
             .group_by(["src_ip", "dst_ip"], maintain_order=True)
             .agg(
-                flow_ids=pl.col("_flow_id"),
+                flow_ids=pl.col("_flow_id").cast(pl.Int64),
                 is_mal=pl.col("_is_malicious").cast(pl.Int64),
-                tss=pl.col("ts_start"),
+                tss=pl.col("ts_start").cast(pl.Float64),
             )
         )
         # ⚡ Bolt Optimization: Avoid iter_rows() dictionary materialization overhead
-        for row_src_ip, row_dst_ip, row_flow_ids, row_is_mal, row_tss in zip(
+        for row_src_ip, row_dst_ip, fids, ismal, tss in zip(
             per_pair["src_ip"].to_list(),
             per_pair["dst_ip"].to_list(),
             per_pair["flow_ids"].to_list(),
@@ -504,9 +504,6 @@ def assign_eval_units(
             per_pair["tss"].to_list(),
             strict=True,
         ):
-            fids = [int(x) for x in row_flow_ids]
-            ismal = [int(x) for x in row_is_mal]
-            tss = [float(x) for x in row_tss]
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
                 mal = sum(ismal[a:b])
@@ -535,14 +532,14 @@ def assign_eval_units(
             host_mode.sort(["src_ip", "bucket", "ts_start", "_flow_id"])
             .group_by(["src_ip", "bucket"], maintain_order=True)
             .agg(
-                flow_ids=pl.col("_flow_id"),
+                flow_ids=pl.col("_flow_id").cast(pl.Int64),
                 is_mal=pl.col("_is_malicious").cast(pl.Int64),
-                tss=pl.col("ts_start"),
+                tss=pl.col("ts_start").cast(pl.Float64),
                 dsts=pl.col("dst_ip"),
             )
         )
         # ⚡ Bolt Optimization: Avoid iter_rows() dictionary materialization overhead
-        for row_src_ip, row_bucket, row_flow_ids, row_is_mal, row_tss, row_dsts in zip(
+        for row_src_ip, row_bucket, fids, ismal, tss, row_dsts in zip(
             per_window["src_ip"].to_list(),
             per_window["bucket"].to_list(),
             per_window["flow_ids"].to_list(),
@@ -551,9 +548,6 @@ def assign_eval_units(
             per_window["dsts"].to_list(),
             strict=True,
         ):
-            fids = [int(x) for x in row_flow_ids]
-            ismal = [int(x) for x in row_is_mal]
-            tss = [float(x) for x in row_tss]
             dsts = list(row_dsts)
             bucket = int(row_bucket)
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
