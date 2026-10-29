@@ -504,9 +504,9 @@ def assign_eval_units(
             per_pair["tss"].to_list(),
             strict=True,
         ):
-            fids = [int(x) for x in row_flow_ids]
-            ismal = [int(x) for x in row_is_mal]
-            tss = [float(x) for x in row_tss]
+            fids = row_flow_ids
+            ismal = row_is_mal
+            tss = row_tss
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
                 mal = sum(ismal[a:b])
@@ -551,10 +551,10 @@ def assign_eval_units(
             per_window["dsts"].to_list(),
             strict=True,
         ):
-            fids = [int(x) for x in row_flow_ids]
-            ismal = [int(x) for x in row_is_mal]
-            tss = [float(x) for x in row_tss]
-            dsts = list(row_dsts)
+            fids = row_flow_ids
+            ismal = row_is_mal
+            tss = row_tss
+            dsts = row_dsts
             bucket = int(row_bucket)
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
