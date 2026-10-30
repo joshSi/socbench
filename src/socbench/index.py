@@ -294,7 +294,9 @@ def derive_pairs(flows: pl.DataFrame) -> pl.DataFrame:
         .sort(["src_ip", "dst_ip"])
     )
     pair_ids = [
-        _pair_id_for(s, d) for s, d in zip(grouped["src_ip"], grouped["dst_ip"], strict=True)
+        # ⚡ Bolt Optimization: Avoid direct Series iteration overhead
+        _pair_id_for(s, d)
+        for s, d in zip(grouped["src_ip"].to_list(), grouped["dst_ip"].to_list(), strict=True)
     ]
     return grouped.with_columns(pl.Series(name="pair_id", values=pair_ids)).select(
         "pair_id",
@@ -555,7 +557,8 @@ def assign_eval_units(
             ismal = row_is_mal
             tss = row_tss
             dsts = row_dsts
-            bucket = int(row_bucket)
+            # ⚡ Bolt Optimization: Avoid redundant type casting; .to_list() yields native types
+            bucket = row_bucket
             for a, b in _chunk_bounds(len(fids), max_flows_per_unit):
                 cf = fids[a:b]
                 mal = sum(ismal[a:b])
