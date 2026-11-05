@@ -5,3 +5,7 @@
 ## 2024-10-29 - Polars `.to_list()` Native Typing
 **Learning:** In Polars, calling `.to_list()` natively produces fully-typed nested Python lists (e.g. `[int, int]` instead of a generic untyped list needing conversion).
 **Action:** When iterating through columns cast from Polars `to_list()`, avoid redundant Python list comprehensions like `[int(x) for x in row]` and directly assign them.
+
+## 2024-05-23 - Avoid direct Polars Series iteration
+**Learning:** Iterating directly over Polars Series using `zip(df["col1"], df["col2"])` is slow due to Python object materialization overhead per element.
+**Action:** Always call `.to_list()` on the Series before zipping or iterating over them, as `.to_list()` is highly optimized and returns natively-typed Python lists.
