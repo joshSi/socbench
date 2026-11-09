@@ -5,3 +5,7 @@
 ## 2024-10-29 - Polars `.to_list()` Native Typing
 **Learning:** In Polars, calling `.to_list()` natively produces fully-typed nested Python lists (e.g. `[int, int]` instead of a generic untyped list needing conversion).
 **Action:** When iterating through columns cast from Polars `to_list()`, avoid redundant Python list comprehensions like `[int(x) for x in row]` and directly assign them.
+
+## 2024-11-20 - O(1) Min/Max on Sorted Slices
+**Learning:** Computing `min(list_slice)` or `max(list_slice)` runs in O(N) time. If the list is monotonically sorted (such as a time series), you can directly access the start and end values in O(1) time.
+**Action:** When computing the min and max on a contiguous chunk of a sorted list, use direct index access like `tss[a]` and `tss[b-1]` instead of `min(tss[a:b])` or `max(tss[a:b])`.
