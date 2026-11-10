@@ -520,8 +520,9 @@ def assign_eval_units(
                         flow_count=len(cf),
                         malicious_flow_count=mal,
                         gold_label=_gold_label(mal, len(cf)),  # type: ignore[arg-type]
-                        ts_start_min=min(tss[a:b]),
-                        ts_start_max=max(tss[a:b]),
+                        # ⚡ Bolt Optimization: O(1) index access (tss is sorted)
+                        ts_start_min=tss[a],
+                        ts_start_max=tss[b-1],
                         distinct_destinations=1,
                     )
                 )
@@ -569,8 +570,9 @@ def assign_eval_units(
                         flow_count=len(cf),
                         malicious_flow_count=mal,
                         gold_label=_gold_label(mal, len(cf)),  # type: ignore[arg-type]
-                        ts_start_min=min(tss[a:b]),
-                        ts_start_max=max(tss[a:b]),
+                        # ⚡ Bolt Optimization: O(1) index access (tss is sorted)
+                        ts_start_min=tss[a],
+                        ts_start_max=tss[b-1],
                         distinct_destinations=len(set(dsts[a:b])),
                     )
                 )
